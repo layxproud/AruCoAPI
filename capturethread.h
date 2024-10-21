@@ -28,6 +28,7 @@ public:
 
 signals:
     void frameReady(const cv::Mat &frame);
+    void newConfiguration(const Configuration &config);
     void distanceCalculated(const QVector<QPair<int, double>> &markers);
     void centerFound(double distance);
 

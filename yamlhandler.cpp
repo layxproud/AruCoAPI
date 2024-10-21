@@ -1,4 +1,5 @@
 #include "yamlhandler.h"
+#include <QDebug>
 #include <QFile>
 
 YamlHandler::YamlHandler(QObject *parent)
@@ -31,24 +32,38 @@ bool YamlHandler::saveCalibrationParameters(
 bool YamlHandler::loadConfigurations(
     const std::string &filename, std::map<std::string, Configuration> &configurations)
 {
-    cv::FileStorage fs(filename, cv::FileStorage::READ);
-    if (!fs.isOpened())
-        return false;
+    try {
+        cv::FileStorage fs(filename, cv::FileStorage::READ);
+        if (!fs.isOpened())
+            return false;
 
-    cv::FileNode configsNode = fs["Configurations"];
-    for (const auto &configNode : configsNode) {
-        Configuration config;
-        configNode["Name"] >> config.name;
-        configNode["MarkerIds"] >> config.markerIds;
-        cv::FileNode relativePointsNode = configNode["RelativePoints"];
-        for (const auto &relativePointNode : relativePointsNode) {
-            int markerId = std::stoi(relativePointNode.name().substr(7));
-            relativePointNode >> config.relativePoints[markerId];
+        cv::FileNode configsNode = fs["Configurations"];
+        for (const auto &configNode : configsNode) {
+            Configuration config;
+            configNode["ID"] >> config.id;
+            configNode["Name"] >> config.name;
+            configNode["Type"] >> config.type;
+            configNode["Date"] >> config.date;
+            configNode["MarkerIds"] >> config.markerIds;
+            cv::FileNode relativePointsNode = configNode["RelativePoints"];
+            for (const auto &relativePointNode : relativePointsNode) {
+                int markerId = std::stoi(relativePointNode.name().substr(7));
+                relativePointNode >> config.relativePoints[markerId];
+            }
+            configurations.insert(std::make_pair(config.name, config));
         }
-        configurations.insert(std::make_pair(config.name, config));
+        fs.release();
+        return true;
+    } catch (const cv::Exception &e) {
+        std::cerr << "OpenCV exception caught: " << e.what() << std::endl;
+        return false;
+    } catch (const std::exception &e) {
+        std::cerr << "Standard exception caught: " << e.what() << std::endl;
+        return false;
+    } catch (...) {
+        std::cerr << "Unknown exception caught" << std::endl;
+        return false;
     }
-    fs.release();
-    return true;
 }
 
 bool YamlHandler::saveConfigurations(
@@ -64,7 +79,10 @@ bool YamlHandler::saveConfigurations(
        << "[";
     for (const auto &config : configurations) {
         fs << "{";
+        fs << "ID" << config.second.id;
         fs << "Name" << config.second.name;
+        fs << "Type" << config.second.type;
+        fs << "Date" << config.second.date;
         fs << "MarkerIds"
            << "[";
         for (int id : config.second.markerIds) {
@@ -74,7 +92,7 @@ bool YamlHandler::saveConfigurations(
         fs << "RelativePoints"
            << "{";
         for (const auto &relativePoint : config.second.relativePoints) {
-            fs << "Marker_" + std::to_string(relativePoint.first) << relativePoint.second;
+            fs << ("Marker_" + std::to_string(relativePoint.first)) << relativePoint.second;
         }
         fs << "}";
         fs << "}";
@@ -105,8 +123,7 @@ bool YamlHandler::updateConfigurations(
     case ConflictType::Intersection:
         emit taskFinished(
             false,
-            tr("Обнаружено пересечение конфигураций! "
-               "Пожалуйста, проверьте выбранное название и "
+            tr("Обнаружено пересечение конфигураций! Пожалуйста, проверьте выбранное название и "
                "маркеры."));
         return false;
     }
@@ -117,6 +134,29 @@ bool YamlHandler::updateConfigurations(
     }
 
     emit taskFinished(true, tr("Файл конфигураций успешно обновлен!"));
+    return true;
+}
+
+bool YamlHandler::removeConfiguration(
+    const std::string &filename, const Configuration &configToRemove)
+{
+    std::map<std::string, Configuration> existingConfigurations;
+    loadConfigurations(filename, existingConfigurations);
+
+    auto it = existingConfigurations.find(configToRemove.name);
+    if (it == existingConfigurations.end()) {
+        emit taskFinished(false, tr("Конфигурация не найдена для удаления!"));
+        return false;
+    }
+
+    existingConfigurations.erase(it);
+
+    if (!saveConfigurations(filename, existingConfigurations)) {
+        emit taskFinished(false, tr("Не удалось сохранить файл конфигураций!"));
+        return false;
+    }
+
+    emit taskFinished(true, tr("Конфигурация успешно удалена из файла!"));
     return true;
 }
 

@@ -9,6 +9,7 @@ AruCoAPI::AruCoAPI(QObject *parent)
     connect(captureThread, &CaptureThread::frameReady, this, &AruCoAPI::frameReady);
     connect(captureThread, &CaptureThread::distanceCalculated, this, &AruCoAPI::distanceCalculated);
     connect(captureThread, &CaptureThread::centerFound, this, &AruCoAPI::centerFound);
+    connect(captureThread, &CaptureThread::newConfiguration, this, &AruCoAPI::newConfiguration);
 }
 
 AruCoAPI::~AruCoAPI()

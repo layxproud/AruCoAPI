@@ -6,9 +6,12 @@
 
 struct Configuration
 {
+    std::string id;
+    std::string name;
+    std::string type;
+    std::string date;
     std::vector<int> markerIds;
     std::map<int, cv::Point3f> relativePoints;
-    std::string name;
 };
 
 struct CalibrationParams
@@ -33,6 +36,7 @@ public:
     bool saveConfigurations(
         const std::string &filename, const std::map<std::string, Configuration> &configurations);
     bool updateConfigurations(const std::string &filename, const Configuration &currentConfiguration);
+    bool removeConfiguration(const std::string &filename, const Configuration &configToRemove);
 
 signals:
     void taskFinished(bool success, const QString &message);

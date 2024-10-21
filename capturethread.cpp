@@ -157,8 +157,7 @@ void CaptureThread::updateConfigurationsMap()
 
 void CaptureThread::detectCurrentConfiguration()
 {
-    Configuration new_Configuration;
-    new_Configuration.name = "";
+    Configuration new_Configuration = Configuration{};
     for (const auto &config : configurations) {
         for (int id : config.second.markerIds) {
             if (std::find(markerIds.begin(), markerIds.end(), id) != markerIds.end()) {
@@ -172,6 +171,7 @@ void CaptureThread::detectCurrentConfiguration()
     }
 
     if (new_Configuration.name != currentConfiguration.name) {
+        emit newConfiguration(new_Configuration);
         currentConfiguration = new_Configuration;
     }
 }

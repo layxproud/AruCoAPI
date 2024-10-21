@@ -24,6 +24,7 @@ signals:
     void taskFinished(bool success, const QString &message);
     void distanceCalculated(const QVector<QPair<int, double>> &markers);
     void centerFound(double distance);
+    void newConfiguration(const Configuration &config);
 
 public slots:
     void startMarkerDetectionTask();
