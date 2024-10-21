@@ -7,7 +7,7 @@ CaptureThread::CaptureThread(QObject *parent)
     , markerDetectionStatus(false)
     , distanceCalculatingStatus(false)
     , centerFindingStatus(false)
-    , markerSize(0.31f)
+    , markerSize(31.0f)
 {
     updateConfigurationsMap();
 
@@ -140,15 +140,19 @@ void CaptureThread::findAndDrawCenter()
             points2D);
 
         cv::circle(currentFrame, points2D[0], 5, cv::Scalar(0, 0, 255), -1);
+        double distanceToCenter = std::sqrt(
+            centerPoint.x * centerPoint.x + centerPoint.y * centerPoint.y
+            + centerPoint.z * centerPoint.z);
 
-        emit centerFound(centerPoint.z);
+        emit centerFound(distanceToCenter);
     }
 }
 
 void CaptureThread::updateConfigurationsMap()
 {
+    configurations.clear();
+    currentConfiguration.name = "...---...";
     yamlHandler->loadConfigurations("configurations.yml", configurations);
-    currentConfiguration = Configuration{};
 }
 
 void CaptureThread::detectCurrentConfiguration()
