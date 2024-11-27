@@ -1,4 +1,4 @@
-QT -= gui
+QT += core gui
 
 TEMPLATE = lib
 DEFINES += ARUCOAPI_LIBRARY

@@ -4,9 +4,7 @@
 CaptureThread::CaptureThread(QObject *parent)
     : QThread(parent)
     , running(false)
-    , markerDetectionStatus(false)
-    , distanceCalculatingStatus(false)
-    , centerFindingStatus(false)
+    , blockDetectionStatus(false)
     , markerSize(31.0f)
 {
     updateConfigurationsMap();
@@ -33,7 +31,7 @@ void CaptureThread::run()
     cap.open(0);
 
     if (!cap.isOpened()) {
-        qCritical() << "Не удалось открыть камеру";
+        qCritical() << "Couldn't open the camera!";
         return;
     }
 
@@ -57,58 +55,28 @@ void CaptureThread::run()
 
             detector.detectMarkers(frame, markerCorners, markerIds, rejectedCorners);
 
-            if (markerIds.size() > 0) {
-                if (markerDetectionStatus) {
+            if (blockDetectionStatus) {
+                if (markerIds.size() > 0) {
                     cv::aruco::drawDetectedMarkers(currentFrame, markerCorners, markerIds);
-                } else if (distanceCalculatingStatus) {
-                    calculateDistance();
-                } else if (centerFindingStatus) {
-                    findAndDrawCenter();
+                    detectBlock();
+                } else {
+                    MarkerBlock block{};
+                    cv::Mat frameCopy = currentFrame.clone();
+                    QImage
+                        img(frameCopy.data,
+                            frameCopy.cols,
+                            frameCopy.rows,
+                            frameCopy.step,
+                            QImage::Format_RGB888);
+                    emit blockDetected(block, img.rgbSwapped());
                 }
-            } else {
-                detectCurrentConfiguration();
             }
-            emit frameReady(currentFrame);
         }
     }
     cap.release();
 }
 
-void CaptureThread::calculateDistance()
-{
-    if (markerIds.empty())
-        return;
-
-    int nMarkers = markerCorners.size();
-    QVector<QPair<int, double>> markers;
-
-    rvecs.clear();
-    tvecs.clear();
-    rvecs.resize(nMarkers);
-    tvecs.resize(nMarkers);
-
-    cv::aruco::estimatePoseSingleMarkers(
-        markerCorners,
-        markerSize,
-        calibrationParams.cameraMatrix,
-        calibrationParams.distCoeffs,
-        rvecs,
-        tvecs);
-
-    for (size_t i = 0; i < markerIds.size(); ++i) {
-        double distance = cv::norm(tvecs[i]);
-        markers.append(qMakePair(markerIds.at(i), distance));
-    }
-
-    std::sort(
-        markers.begin(),
-        markers.end(),
-        [](const QPair<int, double> &a, const QPair<int, double> &b) { return a.first < b.first; });
-
-    emit distanceCalculated(markers);
-}
-
-void CaptureThread::findAndDrawCenter()
+void CaptureThread::detectBlock()
 {
     int nMarkers = markerCorners.size();
     rvecs.clear();
@@ -128,6 +96,9 @@ void CaptureThread::findAndDrawCenter()
 
     updateCenterPointPosition();
 
+    MarkerBlock block{};
+    cv::Mat frameCopy{};
+
     if (centerPoint != cv::Point3f(0.0, 0.0, 0.0) && !currentConfiguration.name.empty()) {
         std::vector<cv::Point3f> points3D = {centerPoint};
         std::vector<cv::Point2f> points2D;
@@ -140,12 +111,18 @@ void CaptureThread::findAndDrawCenter()
             points2D);
 
         cv::circle(currentFrame, points2D[0], 5, cv::Scalar(0, 0, 255), -1);
-        double distanceToCenter = std::sqrt(
+        float distanceToCenter = std::sqrt(
             centerPoint.x * centerPoint.x + centerPoint.y * centerPoint.y
             + centerPoint.z * centerPoint.z);
 
-        emit centerFound(distanceToCenter);
+        block.x = centerPoint.x;
+        block.y = centerPoint.y;
+        block.z = distanceToCenter;
+        block.config = currentConfiguration;
+        frameCopy = currentFrame.clone();
     }
+    QImage img(frameCopy.data, frameCopy.cols, frameCopy.rows, frameCopy.step, QImage::Format_RGB888);
+    emit blockDetected(block, img.rgbSwapped());
 }
 
 void CaptureThread::updateConfigurationsMap()
@@ -171,7 +148,6 @@ void CaptureThread::detectCurrentConfiguration()
     }
 
     if (new_Configuration.name != currentConfiguration.name) {
-        emit newConfiguration(new_Configuration);
         currentConfiguration = new_Configuration;
     }
 }

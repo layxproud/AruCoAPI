@@ -19,18 +19,12 @@ public:
     void stopThread(QThread *thread);
 
 signals:
-    void frameReady(const cv::Mat &frame);
     void taskChanged(const QString &newTask);
     void taskFinished(bool success, const QString &message);
-    void distanceCalculated(const QVector<QPair<int, double>> &markers);
-    void centerFound(double distance);
-    void newConfiguration(const Configuration &config);
+    void blockDetected(const MarkerBlock &block, const QImage &frame);
 
 public slots:
-    void startMarkerDetectionTask();
-    void startDistanceCalculationTask();
-    void startCenterFindingTask();
-    void cancelOperations();
+    void detectMarkerBlocks(bool status);
 
 private:
     YamlHandler *yamlHandler;

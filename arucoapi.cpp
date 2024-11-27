@@ -6,10 +6,7 @@ AruCoAPI::AruCoAPI(QObject *parent)
     , yamlHandler(new YamlHandler(this))
     , captureThread(new CaptureThread(this))
 {
-    connect(captureThread, &CaptureThread::frameReady, this, &AruCoAPI::frameReady);
-    connect(captureThread, &CaptureThread::distanceCalculated, this, &AruCoAPI::distanceCalculated);
-    connect(captureThread, &CaptureThread::centerFound, this, &AruCoAPI::centerFound);
-    connect(captureThread, &CaptureThread::newConfiguration, this, &AruCoAPI::newConfiguration);
+    connect(captureThread, &CaptureThread::blockDetected, this, &AruCoAPI::blockDetected);
 }
 
 AruCoAPI::~AruCoAPI()
@@ -21,7 +18,7 @@ void AruCoAPI::init()
 {
     CalibrationParams calibrationParams;
     if (!yamlHandler->loadCalibrationParameters("calibration.yml", calibrationParams)) {
-        emit taskFinished(false, tr("Не обнаружен файл калибровки. Сначала откалибруйте камеру!"));
+        emit taskFinished(false, tr("No calibration file found. Calibrate your camera first!"));
         return;
     }
     captureThread->setCalibrationParams(calibrationParams);
@@ -52,40 +49,17 @@ void AruCoAPI::stopThread(QThread *thread)
     }
 }
 
-void AruCoAPI::startMarkerDetectionTask()
+void AruCoAPI::detectMarkerBlocks(bool status)
 {
-    if (!captureThread->getMarkerDetectionStatus()) {
-        captureThread->setDistanceCalculatingStatus(false);
-        captureThread->setCenterFindingStatus(false);
-        captureThread->setMarkerDetectingStatus(true);
-        emit taskChanged(tr("Ведется поиск маркеров"));
+    if (status) {
+        if (!captureThread->getBlockDetectionStatus()) {
+            captureThread->setBlockDetectionStatus(true);
+            emit taskChanged(tr("Block detection started"));
+        }
+    } else {
+        if (captureThread->getBlockDetectionStatus()) {
+            captureThread->setBlockDetectionStatus(false);
+            emit taskChanged(tr("Block detection stopped"));
+        }
     }
-}
-
-void AruCoAPI::startDistanceCalculationTask()
-{
-    if (!captureThread->getDistanceCalculatingStatus()) {
-        captureThread->setCenterFindingStatus(false);
-        captureThread->setMarkerDetectingStatus(false);
-        captureThread->setDistanceCalculatingStatus(true);
-        emit taskChanged(tr("Ведется измерение расстояний"));
-    }
-}
-
-void AruCoAPI::startCenterFindingTask()
-{
-    if (!captureThread->getCenterFindingStatus()) {
-        captureThread->setDistanceCalculatingStatus(false);
-        captureThread->setMarkerDetectingStatus(false);
-        captureThread->setCenterFindingStatus(true);
-        emit taskChanged(tr("Ведется поиск центра"));
-    }
-}
-
-void AruCoAPI::cancelOperations()
-{
-    captureThread->setDistanceCalculatingStatus(false);
-    captureThread->setCenterFindingStatus(false);
-    captureThread->setMarkerDetectingStatus(false);
-    emit taskChanged(tr("Нет задачи"));
 }
