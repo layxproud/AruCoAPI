@@ -4,16 +4,17 @@
 #include "yamlhandler.h"
 #include <opencv2/aruco.hpp>
 #include <opencv2/opencv.hpp>
-#include <QImage>
 #include <QMutex>
+#include <QPixmap>
 #include <QThread>
 
+// Class containing information about marker block
 class MarkerBlock
 {
 public:
-    float x;
-    float y;
-    float z;
+    QPointF blockCenter;
+    float distanceToCenter;
+    float blockAngle;
     Configuration config;
 };
 
@@ -23,17 +24,20 @@ class CaptureThread : public QThread
 public:
     CaptureThread(QObject *parent = nullptr);
 
+    // Setters
     void setYamlHandler(YamlHandler *handler) { yamlHandler = handler; }
     void setCalibrationParams(const CalibrationParams &params) { calibrationParams = params; }
     void setMarkerSize(float newSize) { markerSize = newSize; }
     void setBlockDetectionStatus(bool status) { blockDetectionStatus = status; }
 
+    // Getters
     bool getBlockDetectionStatus() { return blockDetectionStatus; }
 
-    void stop();
+    void stop(); // Stops the thread
 
 signals:
-    void blockDetected(const MarkerBlock &block, const QImage &frame);
+    void frameCaptured(const QPixmap &frame);     // frame captured by VideoCapture
+    void blockDetected(const MarkerBlock &block); // valid marker block detected
 
 protected:
     void run() override;

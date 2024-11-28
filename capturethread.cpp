@@ -28,6 +28,7 @@ void CaptureThread::stop()
 
 void CaptureThread::run()
 {
+    // cap.open("rtsp://admin:QulonCamera1@192.168.1.85:554/video");
     cap.open(0);
 
     if (!cap.isOpened()) {
@@ -53,24 +54,22 @@ void CaptureThread::run()
             rvecs.clear();
             tvecs.clear();
 
-            detector.detectMarkers(frame, markerCorners, markerIds, rejectedCorners);
+            detector.detectMarkers(currentFrame, markerCorners, markerIds, rejectedCorners);
 
-            if (blockDetectionStatus) {
-                if (markerIds.size() > 0) {
-                    cv::aruco::drawDetectedMarkers(currentFrame, markerCorners, markerIds);
-                    detectBlock();
-                } else {
-                    MarkerBlock block{};
-                    cv::Mat frameCopy = currentFrame.clone();
-                    QImage
-                        img(frameCopy.data,
-                            frameCopy.cols,
-                            frameCopy.rows,
-                            frameCopy.step,
-                            QImage::Format_RGB888);
-                    emit blockDetected(block, img.rgbSwapped());
-                }
+            if (blockDetectionStatus && markerIds.size() > 0) {
+                cv::aruco::drawDetectedMarkers(currentFrame, markerCorners, markerIds);
+                detectBlock();
             }
+
+            cv::Mat frameCopy = currentFrame.clone();
+            QImage
+                img(frameCopy.data,
+                    frameCopy.cols,
+                    frameCopy.rows,
+                    frameCopy.step,
+                    QImage::Format_RGB888);
+            QPixmap pixmap = QPixmap::fromImage(img.rgbSwapped());
+            emit frameCaptured(pixmap);
         }
     }
     cap.release();
@@ -84,6 +83,8 @@ void CaptureThread::detectBlock()
     rvecs.resize(nMarkers);
     tvecs.resize(nMarkers);
 
+    std::vector<float> yaws; // Container for yaw angles
+
     for (size_t i = 0; i < nMarkers; i++) {
         solvePnP(
             objPoints,
@@ -92,12 +93,24 @@ void CaptureThread::detectBlock()
             calibrationParams.distCoeffs,
             rvecs.at(i),
             tvecs.at(i));
+
+        // Convert rvec to rotation matrix
+        cv::Mat rotationMatrix;
+        cv::Rodrigues(rvecs.at(i), rotationMatrix);
+
+        // Calculate yaw angle and normalize to [0, 360)
+        float yaw = atan2(rotationMatrix.at<double>(1, 0), rotationMatrix.at<double>(0, 0))
+                    * (180.0 / CV_PI);
+        if (yaw < 0) {
+            yaw += 360.0f;
+        }
+
+        yaws.push_back(yaw);
     }
 
     updateCenterPointPosition();
 
     MarkerBlock block{};
-    cv::Mat frameCopy{};
 
     if (centerPoint != cv::Point3f(0.0, 0.0, 0.0) && !currentConfiguration.name.empty()) {
         std::vector<cv::Point3f> points3D = {centerPoint};
@@ -115,20 +128,24 @@ void CaptureThread::detectBlock()
             centerPoint.x * centerPoint.x + centerPoint.y * centerPoint.y
             + centerPoint.z * centerPoint.z);
 
-        block.x = centerPoint.x;
-        block.y = centerPoint.y;
-        block.z = distanceToCenter;
+        block.blockCenter = QPointF(centerPoint.x, centerPoint.y);
+        block.distanceToCenter = distanceToCenter;
         block.config = currentConfiguration;
-        frameCopy = currentFrame.clone();
     }
-    QImage img(frameCopy.data, frameCopy.cols, frameCopy.rows, frameCopy.step, QImage::Format_RGB888);
-    emit blockDetected(block, img.rgbSwapped());
+
+    if (!yaws.empty()) {
+        std::sort(yaws.begin(), yaws.end());
+        size_t mid = yaws.size() / 2;
+        block.blockAngle = (yaws.size() % 2 == 0) ? (yaws[mid - 1] + yaws[mid]) / 2.0f : yaws[mid];
+    }
+
+    emit blockDetected(block);
 }
 
 void CaptureThread::updateConfigurationsMap()
 {
     configurations.clear();
-    currentConfiguration.name = "...---...";
+    currentConfiguration.clear();
     yamlHandler->loadConfigurations("configurations.yml", configurations);
 }
 

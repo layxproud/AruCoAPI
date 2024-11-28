@@ -12,6 +12,16 @@ struct Configuration
     std::string date;
     std::vector<int> markerIds;
     std::map<int, cv::Point3f> relativePoints;
+
+    void clear()
+    {
+        id = "";
+        name = "___";
+        type = "";
+        date = "";
+        markerIds.clear();
+        relativePoints.clear();
+    }
 };
 
 struct CalibrationParams

@@ -6,7 +6,9 @@ AruCoAPI::AruCoAPI(QObject *parent)
     , yamlHandler(new YamlHandler(this))
     , captureThread(new CaptureThread(this))
 {
+    connect(captureThread, &CaptureThread::frameCaptured, this, &AruCoAPI::frameCaptured);
     connect(captureThread, &CaptureThread::blockDetected, this, &AruCoAPI::blockDetected);
+    init();
 }
 
 AruCoAPI::~AruCoAPI()
