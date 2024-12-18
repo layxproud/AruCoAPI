@@ -73,7 +73,7 @@ private:
     void updateConfigurationsMap();
     void detectCurrentConfiguration();
     void updateCenterPointPosition();
-    cv::Point3f calculateMedianPoint(const std::vector<cv::Point3f> &points);
+    cv::Point3f calculateWeightedAveragePoint(const std::vector<cv::Point3f> &points, const std::vector<float> &errors);
 };
 
 #endif // CAPTURETHREAD_H
