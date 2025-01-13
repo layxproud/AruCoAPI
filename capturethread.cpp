@@ -31,11 +31,17 @@ void CaptureThread::run()
     cv::Mat resizedFrame;
     cv::Size newSize(640, 480);
 
-    cap.open("rtsp://admin:QulonCamera1@192.168.1.85:554/stream1");
-    // cap.open(0);
+    cap.open(0);
+    // cap.open("rtsp://admin:QulonCamera1@192.168.1.85:554/stream1");
+    // cap.open(
+    //     "udpsrc port=5000 caps = \"application/x-rtp, media=(string)video, clock-rate=(int)90000, "
+    //     "encoding-name=(string)H264, payload=(int)96\" ! rtph264depay ! decodebin ! videoconvert ! "
+    //     "appsink",
+    //     cv::CAP_GSTREAMER);
 
     if (!cap.isOpened()) {
         qCritical() << "Couldn't open the camera!";
+        emit taskFinished(false, tr("Couldn't open the camera!"));
         return;
     }
 
@@ -83,8 +89,9 @@ void CaptureThread::run()
                     cv::Rodrigues(rvecs.at(i), rotationMatrix);
 
                     // Calculate yaw angle and normalize to [0, 360)
-                    float yaw = atan2(rotationMatrix.at<double>(1, 0), rotationMatrix.at<double>(0, 0))
-                                * (180.0 / CV_PI);
+                    float yaw
+                        = atan2(rotationMatrix.at<double>(1, 0), rotationMatrix.at<double>(0, 0))
+                          * (180.0 / CV_PI);
                     if (yaw < 0) {
                         yaw += 360.0f;
                     }
@@ -96,7 +103,7 @@ void CaptureThread::run()
 
                 MarkerBlock block{};
 
-                // Перевод точки из пространства на плоскость
+                // 3D point to 2D
                 if (centerPoint != cv::Point3f(0.0, 0.0, 0.0)
                     && !currentConfiguration.name.empty()) {
                     qDebug() << "X: " << centerPoint.x;
@@ -125,9 +132,9 @@ void CaptureThread::run()
                 if (!yaws.empty()) {
                     std::sort(yaws.begin(), yaws.end());
                     size_t mid = yaws.size() / 2;
-                    block.blockAngle = (yaws.size() % 2 == 0) ? (yaws[mid - 1] + yaws[mid]) / 2.0f : yaws[mid];
+                    block.blockAngle = (yaws.size() % 2 == 0) ? (yaws[mid - 1] + yaws[mid]) / 2.0f
+                                                              : yaws[mid];
                 }
-
                 emit blockDetected(block);
             } else {
                 detectCurrentConfiguration();

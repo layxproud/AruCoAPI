@@ -38,6 +38,8 @@ public:
 signals:
     void frameCaptured(const QPixmap &frame);     // frame captured by VideoCapture
     void blockDetected(const MarkerBlock &block); // valid marker block detected
+    void taskFinished(bool success,
+                      const QString &message); // Informs about task completion status
 
 protected:
     void run() override;
@@ -73,7 +75,8 @@ private:
     void updateConfigurationsMap();
     void detectCurrentConfiguration();
     void updateCenterPointPosition();
-    cv::Point3f calculateWeightedAveragePoint(const std::vector<cv::Point3f> &points, const std::vector<float> &errors);
+    cv::Point3f calculateWeightedAveragePoint(
+        const std::vector<cv::Point3f> &points, const std::vector<float> &errors);
 };
 
 #endif // CAPTURETHREAD_H

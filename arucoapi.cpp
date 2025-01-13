@@ -4,10 +4,13 @@
 AruCoAPI::AruCoAPI(QObject *parent)
     : QObject{parent}
     , yamlHandler(new YamlHandler(this))
-    , captureThread(new CaptureThread(this))
+    , captureThread(new CaptureThread())
 {
     connect(captureThread, &CaptureThread::frameCaptured, this, &AruCoAPI::frameCaptured);
     connect(captureThread, &CaptureThread::blockDetected, this, &AruCoAPI::blockDetected);
+    connect(captureThread, &CaptureThread::taskFinished, this, &AruCoAPI::taskFinished);
+    connect(yamlHandler, &YamlHandler::taskFinished, this, &AruCoAPI::taskFinished);
+
     init();
 }
 

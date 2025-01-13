@@ -20,12 +20,12 @@ HEADERS += \
     arucoapi.h \
     yamlhandler.h
 
-win32:CONFIG(release, debug|release): LIBS += -L$$PWD/third_party/opencv_mingw810/x64/mingw/lib/ -llibopencv_world4100
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/third_party/opencv_mingw810/x64/mingw/lib/ -llibopencv_world4100d
-else:unix: LIBS += -L$$PWD/third_party/opencv_mingw810/x64/mingw/lib/ -llibopencv_world4100.dll
+# OPENCV
+win32:CONFIG(release, debug|release): LIBS += -L$$PWD/third_party/opencv490_mingw810/x64/mingw/bin/ -llibopencv_world490
+else:unix: LIBS += -L$$PWD/third_party/opencv490_mingw810/x64/mingw/lib/ -llibopencv_world490.dll
 
-INCLUDEPATH += $$PWD/third_party/opencv_mingw810/include
-DEPENDPATH += $$PWD/third_party/opencv_mingw810/include
+INCLUDEPATH += $$PWD/third_party/opencv490_mingw810/include
+DEPENDPATH += $$PWD/third_party/opencv490_mingw810/include
 
 # Default rules for deployment.
 unix {

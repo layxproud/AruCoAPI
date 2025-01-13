@@ -123,17 +123,17 @@ bool YamlHandler::updateConfigurations(
     case ConflictType::Intersection:
         emit taskFinished(
             false,
-            tr("Обнаружено пересечение конфигураций! Пожалуйста, проверьте выбранное название и "
-               "маркеры."));
+            tr("Aborting operation, intersection of configurations is detected! Please make sure "
+               "to save block with unique name and markers."));
         return false;
     }
 
     if (!saveConfigurations(filename, existingConfigurations)) {
-        emit taskFinished(false, tr("Не удалось сохранить файл конфигураций!"));
+        emit taskFinished(false, tr("Error occured while saving configuration file!"));
         return false;
     }
 
-    emit taskFinished(true, tr("Файл конфигураций успешно обновлен!"));
+    emit taskFinished(true, tr("Configuration file updated successfully."));
     return true;
 }
 
@@ -145,18 +145,18 @@ bool YamlHandler::removeConfiguration(
 
     auto it = existingConfigurations.find(configToRemove.name);
     if (it == existingConfigurations.end()) {
-        emit taskFinished(false, tr("Конфигурация не найдена для удаления!"));
+        emit taskFinished(false, tr("Could not find selected configuration!"));
         return false;
     }
 
     existingConfigurations.erase(it);
 
     if (!saveConfigurations(filename, existingConfigurations)) {
-        emit taskFinished(false, tr("Не удалось сохранить файл конфигураций!"));
+        emit taskFinished(false, tr("Error occured while saving configuration file!"));
         return false;
     }
 
-    emit taskFinished(true, tr("Конфигурация успешно удалена из файла!"));
+    emit taskFinished(true, tr("Configuration deleted successfully."));
     return true;
 }
 
@@ -171,26 +171,26 @@ ConflictType YamlHandler::findDuplicateConfiguration(
     std::string markerIdMatchConfig;
 
     for (const auto &entry : configurations) {
-        // Проверяем имена
+        // Searching matching names
         if (entry.second.name == currentConfiguration.name) {
             nameMatches = true;
             nameMatchConfig = entry.first;
         }
 
-        // Конвертируем в адекватный формат
+        // Converting to desired format
         std::vector<int> sortedExistingMarkerIds(entry.second.markerIds);
         std::vector<int> sortedCurrentMarkerIds(currentConfiguration.markerIds);
 
         std::sort(sortedExistingMarkerIds.begin(), sortedExistingMarkerIds.end());
         std::sort(sortedCurrentMarkerIds.begin(), sortedCurrentMarkerIds.end());
 
-        // Проверяем маркеры
+        // Searching for markers
         if (sortedExistingMarkerIds == sortedCurrentMarkerIds) {
             markerIdMatches = true;
             markerIdMatchConfig = entry.first;
         }
 
-        // Ищем пересечения
+        // Searching for intersections
         std::vector<int> intersection;
         std::set_intersection(
             sortedExistingMarkerIds.begin(),
@@ -199,7 +199,7 @@ ConflictType YamlHandler::findDuplicateConfiguration(
             sortedCurrentMarkerIds.end(),
             std::back_inserter(intersection));
 
-        // Проверяем результат
+        // Calculating result
         if (!intersection.empty() && intersection.size() != sortedExistingMarkerIds.size()) {
             duplicateName = "";
             return ConflictType::Intersection;
