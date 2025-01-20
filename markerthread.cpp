@@ -5,6 +5,7 @@
 MarkerThread::MarkerThread(QObject *parent)
     : QThread{parent}
     , running(false)
+    , blockDetectionStatus(false)
     , markerSize(55.0f)
 {
     updateConfigurationsMap();
@@ -28,18 +29,16 @@ void MarkerThread::stop()
 
 void MarkerThread::run()
 {
-    cv::Mat resizedImage;
+    cv::Mat resizedFrame;
     cv::Size newSize(640, 480);
 
     cap.open(0);
-    // cap.open(
-    //     "udpsrc port=5000 caps = \"application/x-rtp, media=(string)video, clock-rate=(int)90000, "
-    //     "encoding-name=(string)H264, payload=(int)96\" ! rtph264depay ! decodebin ! videoconvert ! "
-    //     "appsink",
-    //     cv::CAP_GSTREAMER);
 
-    if (!cap.isOpened())
+    if (!cap.isOpened()) {
+        emit taskFinished(false, tr("Failed to open camera"));
+        cap.release();
         return;
+    }
 
     running = true;
 
@@ -52,7 +51,7 @@ void MarkerThread::run()
         {
             QMutexLocker locker(&mutex);
             currentFrame = frame.clone();
-            cv::resize(currentFrame, resizedImage, newSize);
+            cv::resize(currentFrame, resizedFrame, newSize);
 
             markerIds.clear();
             markerPoints.clear();
@@ -60,14 +59,16 @@ void MarkerThread::run()
             tvecs.clear();
 
             std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCorners;
-            detector.detectMarkers(resizedImage, markerCorners, markerIds, rejectedCorners);
+            detector.detectMarkers(resizedFrame, markerCorners, markerIds, rejectedCorners);
 
             if (blockDetectionStatus && markerIds.size() > 0) {
-                cv::aruco::drawDetectedMarkers(resizedImage, markerCorners, markerIds);
+                cv::aruco::drawDetectedMarkers(resizedFrame, markerCorners, markerIds);
 
                 int nMarkers = markerCorners.size();
                 rvecs.resize(nMarkers);
                 tvecs.resize(nMarkers);
+
+                std::vector<float> yaws{}; // Stores yaw angles of markers
 
                 for (size_t i = 0; i < nMarkers; i++) {
                     solvePnP(
@@ -78,19 +79,34 @@ void MarkerThread::run()
                         rvecs.at(i),
                         tvecs.at(i));
 
+                    cv::Mat rotationMatrix;
+                    cv::Rodrigues(rvecs.at(i), rotationMatrix);
+
+                    // Calculate yaw angle and normalize to [0, 360)
+                    float yaw
+                        = atan2(rotationMatrix.at<double>(1, 0), rotationMatrix.at<double>(0, 0))
+                          * (180.0 / CV_PI);
+                    if (yaw < 0) {
+                        yaw += 360.0f;
+                    }
+
+                    yaws.push_back(yaw);
+
                     markerPoints.push_back(
                         std::make_pair(markerCorners[i][0], cv::Point3f(tvecs[i])));
                 }
 
-                updateSelectedPointPosition();
+                updateCenterPointPosition();
+
+                MarkerBlock block{};
 
                 // 3D point to 2D
-                if (selectedPoint != cv::Point3f(0.0, 0.0, 0.0)
+                if (centerPoint != cv::Point3f(0.0, 0.0, 0.0)
                     && !currentConfiguration.name.empty()) {
-                    qDebug() << "X: " << selectedPoint.x;
-                    qDebug() << "Y: " << selectedPoint.y;
-                    qDebug() << "Distance: " << selectedPoint.z;
-                    std::vector<cv::Point3f> points3D = {selectedPoint};
+                    qDebug() << "X: " << centerPoint.x;
+                    qDebug() << "Y: " << centerPoint.y;
+                    qDebug() << "Distance: " << centerPoint.z;
+                    std::vector<cv::Point3f> points3D = {centerPoint};
                     std::vector<cv::Point2f> points2D;
                     cv::projectPoints(
                         points3D,
@@ -100,68 +116,38 @@ void MarkerThread::run()
                         calibrationParams.distCoeffs,
                         points2D);
 
-                    cv::circle(resizedImage, points2D[0], 5, cv::Scalar(0, 0, 255), -1);
+                    cv::circle(resizedFrame, points2D[0], 5, cv::Scalar(0, 0, 255), -1);
 
-                    std::stringstream ss;
-                    double distance = std::sqrt(
-                        selectedPoint.x * selectedPoint.x + selectedPoint.y * selectedPoint.y
-                        + selectedPoint.z * selectedPoint.z);
-                    ss << "DISTANCE: " << distance << " mm";
-                    cv::putText(
-                        resizedImage,
-                        ss.str(),
-                        cv::Point(50, 50),
-                        cv::FONT_HERSHEY_SIMPLEX,
-                        1,
-                        cv::Scalar(0, 255, 0),
-                        2);
+                    float distanceToCenter = std::sqrt(
+                        centerPoint.x * centerPoint.x + centerPoint.y * centerPoint.y
+                        + centerPoint.z * centerPoint.z);
+                    block.blockCenter = QPointF(centerPoint.x, centerPoint.y);
+                    block.distanceToCenter = distanceToCenter;
+                    block.config = currentConfiguration;
                 }
+
+                if (!yaws.empty()) {
+                    std::sort(yaws.begin(), yaws.end());
+                    size_t mid = yaws.size() / 2;
+                    block.blockAngle = (yaws.size() % 2 == 0) ? (yaws[mid - 1] + yaws[mid]) / 2.0f
+                                                              : yaws[mid];
+                }
+                emit blockDetected(block);
             } else {
                 detectCurrentConfiguration();
             }
-            emit frameReady(resizedImage);
+            QImage
+                img(resizedFrame.data,
+                    resizedFrame.cols,
+                    resizedFrame.rows,
+                    resizedFrame.step,
+                    QImage::Format_RGB888);
+            QPixmap pixmap = QPixmap::fromImage(img.rgbSwapped());
+            emit frameReady(pixmap);
         }
     }
 
     cap.release();
-}
-
-void MarkerThread::onPointSelected(const QPointF &point)
-{
-    QMutexLocker locker(&mutex);
-
-    if (markerIds.size() != 4) {
-        emit taskFinished(false, tr("You need exactly 4 markers to create a configuration"));
-        return;
-    }
-
-    cv::Point2f clickedPoint2D(point.x(), point.y());
-
-    float depth = getDepthAtPoint(clickedPoint2D);
-    cv::Point3f clickedPoint3D = projectPointTo3D(clickedPoint2D, depth);
-
-    Configuration newConfig = Configuration{};
-    newConfig.markerIds = markerIds;
-    newConfig.name = currentConfiguration.name.empty() ? "New configuration"
-                                                       : currentConfiguration.name;
-
-    for (int markerId : newConfig.markerIds) {
-        auto it = std::find(markerIds.begin(), markerIds.end(), markerId);
-        if (it != markerIds.end()) {
-            int index = std::distance(markerIds.begin(), it);
-            cv::Point3f relativePoint
-                = calculateRelativePosition(clickedPoint3D, rvecs.at(index), tvecs.at(index));
-            newConfig.relativePoints[markerId] = relativePoint;
-        }
-    }
-
-    configurations[newConfig.name] = newConfig;
-    // This code was created to help GUI correctly update
-    Configuration tempConfig = newConfig;
-    detectCurrentConfiguration();
-    if (tempConfig.name == currentConfiguration.name) {
-        currentConfiguration = tempConfig;
-    }
 }
 
 void MarkerThread::updateConfigurationsMap()
@@ -192,68 +178,7 @@ void MarkerThread::detectCurrentConfiguration()
     }
 }
 
-cv::Vec4f MarkerThread::calculateMarkersPlane(const std::vector<cv::Point3f> &marker3DPoints)
-{
-    cv::Point3f v1 = marker3DPoints[1] - marker3DPoints[0];
-    cv::Point3f v2 = marker3DPoints[2] - marker3DPoints[0];
-
-    cv::Point3f normal = v1.cross(v2);
-    float D = -(normal.dot(marker3DPoints[0]));
-
-    return cv::Vec4f(normal.x, normal.y, normal.z, D);
-}
-
-float MarkerThread::getDepthAtPoint(const cv::Point2f &point)
-{
-    cv::Mat K = calibrationParams.cameraMatrix;
-    float x = (point.x - K.at<double>(0, 2)) / K.at<double>(0, 0);
-    float y = (point.y - K.at<double>(1, 2)) / K.at<double>(1, 1);
-    cv::Point3f rayDir(x, y, 1.0f);
-
-    std::vector<cv::Point3f> marker3DPoints;
-    for (const auto &marker : markerPoints) {
-        marker3DPoints.push_back(marker.second);
-    }
-
-    cv::Vec4f plane = calculateMarkersPlane(marker3DPoints);
-
-    float numerator = -(plane[0] * 0 + plane[1] * 0 + plane[2] * 0 + plane[3]);
-    float denominator = plane[0] * rayDir.x + plane[1] * rayDir.y + plane[2] * rayDir.z;
-
-    float t = numerator / denominator;
-
-    return t;
-}
-
-cv::Point3f MarkerThread::projectPointTo3D(const cv::Point2f &point2D, float depth)
-{
-    float x = (point2D.x - calibrationParams.cameraMatrix.at<double>(0, 2))
-              / calibrationParams.cameraMatrix.at<double>(0, 0);
-    float y = (point2D.y - calibrationParams.cameraMatrix.at<double>(1, 2))
-              / calibrationParams.cameraMatrix.at<double>(1, 1);
-
-    return cv::Point3f(x * depth, y * depth, depth);
-}
-
-cv::Point3f MarkerThread::calculateRelativePosition(
-    const cv::Point3f &point3D, const cv::Vec3d &rvec, const cv::Vec3d &tvec)
-{
-    cv::Mat rotationMatrix;
-    cv::Rodrigues(rvec, rotationMatrix);
-
-    cv::Mat rotationMatrixInv = rotationMatrix.inv();
-    cv::Mat tvecInv = -rotationMatrixInv * cv::Mat(tvec);
-
-    cv::Mat pointMat = (cv::Mat_<double>(3, 1) << point3D.x, point3D.y, point3D.z);
-    cv::Mat relativePointMat = rotationMatrixInv * pointMat + tvecInv;
-
-    return cv::Point3f(
-        relativePointMat.at<double>(0),
-        relativePointMat.at<double>(1),
-        relativePointMat.at<double>(2));
-}
-
-void MarkerThread::updateSelectedPointPosition()
+void MarkerThread::updateCenterPointPosition()
 {
     detectCurrentConfiguration();
     if (currentConfiguration.name.empty()) {
@@ -286,7 +211,7 @@ void MarkerThread::updateSelectedPointPosition()
     }
 
     if (!allPoints.empty()) {
-        selectedPoint = calculateWeightedAveragePoint(allPoints, reprojectionErrors);
+        centerPoint = calculateWeightedAveragePoint(allPoints, reprojectionErrors);
     }
 }
 

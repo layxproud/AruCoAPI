@@ -5,6 +5,7 @@
 #include <opencv2/aruco.hpp>
 #include <opencv2/opencv.hpp>
 #include <QMutex>
+#include <QPixmap>
 #include <QPointF>
 #include <QThread>
 
@@ -35,7 +36,7 @@ public:
     void stop();
 
 signals:
-    void frameReady(const cv::Mat &frame);
+    void frameReady(const QPixmap &pixmap);
     void blockDetected(const MarkerBlock &block);
     void newConfiguration(const Configuration &config);
     void taskFinished(bool success, const QString &message);
@@ -44,18 +45,18 @@ protected:
     void run() override;
 
 public slots:
-    void onPointSelected(const QPointF &point);
     void setMarkerSize(int size) { markerSize = (float) size; }
     void updateConfigurationsMap();
 
 private:
     YamlHandler *yamlHandler;
-    bool running;
-    cv::Mat currentFrame;
-    cv::VideoCapture cap;
     QMutex mutex;
+    bool running;
     bool blockDetectionStatus;
     float markerSize;
+
+    cv::Mat currentFrame;
+    cv::VideoCapture cap;
 
     cv::aruco::Dictionary AruCoDict;
     cv::aruco::DetectorParameters detectorParams;
@@ -71,17 +72,11 @@ private:
     std::vector<cv::Vec3d> tvecs;
     std::vector<std::pair<cv::Point2f, cv::Point3f>> markerPoints;
 
-    cv::Point3f selectedPoint;
+    cv::Point3f centerPoint;
 
     void detectCurrentConfiguration();
 
-    cv::Vec4f calculateMarkersPlane(const std::vector<cv::Point3f> &marker3DPoints);
-    float getDepthAtPoint(const cv::Point2f &point);
-    cv::Point3f projectPointTo3D(const cv::Point2f &point2D, float depth);
-    cv::Point3f calculateRelativePosition(
-        const cv::Point3f &point3D, const cv::Vec3d &rvec, const cv::Vec3d &tvec);
-
-    void updateSelectedPointPosition();
+    void updateCenterPointPosition();
     cv::Point3f calculateWeightedAveragePoint(
         const std::vector<cv::Point3f> &points, const std::vector<float> &errors);
 };

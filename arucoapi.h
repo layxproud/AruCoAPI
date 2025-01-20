@@ -24,7 +24,7 @@ signals:
     void taskChanged(const QString &newTask); // Informs about changes to current task
     void taskFinished(bool success,
                       const QString &message);    // Informs about task completion status
-    void frameReady(const cv::Mat &frame);        // Frame captured by captureThread
+    void frameReady(const QPixmap &pixmap);       // Frame captured by captureThread
     void blockDetected(const MarkerBlock &block); // Valid marker block detected
 
 public slots:
