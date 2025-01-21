@@ -103,9 +103,6 @@ void MarkerThread::run()
                 // 3D point to 2D
                 if (centerPoint != cv::Point3f(0.0, 0.0, 0.0)
                     && !currentConfiguration.name.empty()) {
-                    qDebug() << "X: " << centerPoint.x;
-                    qDebug() << "Y: " << centerPoint.y;
-                    qDebug() << "Distance: " << centerPoint.z;
                     std::vector<cv::Point3f> points3D = {centerPoint};
                     std::vector<cv::Point2f> points2D;
                     cv::projectPoints(
@@ -124,15 +121,15 @@ void MarkerThread::run()
                     block.blockCenter = QPointF(centerPoint.x, centerPoint.y);
                     block.distanceToCenter = distanceToCenter;
                     block.config = currentConfiguration;
-                }
 
-                if (!yaws.empty()) {
-                    std::sort(yaws.begin(), yaws.end());
-                    size_t mid = yaws.size() / 2;
-                    block.blockAngle = (yaws.size() % 2 == 0) ? (yaws[mid - 1] + yaws[mid]) / 2.0f
-                                                              : yaws[mid];
-                }
-                emit blockDetected(block);
+                    if (!yaws.empty()) {
+                        std::sort(yaws.begin(), yaws.end());
+                        size_t mid = yaws.size() / 2;
+                        block.blockAngle = (yaws.size() % 2 == 0) ? (yaws[mid - 1] + yaws[mid]) / 2.0f
+                                                                  : yaws[mid];
+                    }
+                    emit blockDetected(block);
+                } 
             } else {
                 detectCurrentConfiguration();
             }
