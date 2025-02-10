@@ -1,5 +1,6 @@
 # Folders
-/build
+build/
+third_party/
 
 # C++ objects and libs
 *.slo
@@ -57,3 +58,6 @@ compile_commands.json
 
 # Clang files
 .clang-format
+
+# Yaml files
+*.yml
